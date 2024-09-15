@@ -1,0 +1,42 @@
+[project]
+name = 'nsync'
+version = '0.0.1'
+description = 'Bridge code to let non-async programs use async-compatible libraries.'
+authors = [
+    {name = 'Daniel Reed', email = 'nmlorg@gmail.com'},
+]
+requires-python = '>=3.8'
+dependencies = [
+    'anyio',
+    'sniffio',
+]
+
+[project.optional-dependencies]
+dev = [
+    'pylint',
+    'pytest-cov',
+    'pytest',
+    'trio',
+]
+
+[project.urls]
+Homepage = 'https://github.com/nmlorg/nsync'
+Issues = 'https://github.com/nmlorg/nsync/issues'
+
+[tool.pylint.'MESSAGES CONTROL']
+disable = [
+    'unnecessary-lambda-assignment',
+]
+
+[tool.pytest.ini_options]
+addopts = '-rN --cov=nsync --cov-report=html'
+consider_namespace_packages = true
+testpaths = ['nsync']
+verbosity_assertions = 2
+
+[tool.setuptools.packages.find]
+include = ['nsync', 'nsync.*']
+
+[tool.yapf]
+based_on_style = 'google'
+column_limit = 100
