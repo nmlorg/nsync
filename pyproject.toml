@@ -25,6 +25,8 @@ Issues = 'https://github.com/nmlorg/nsync/issues'
 
 [tool.pylint.'MESSAGES CONTROL']
 disable = [
+    'duplicate-code',
+    'too-few-public-methods',
     'unnecessary-lambda-assignment',
 ]
 
