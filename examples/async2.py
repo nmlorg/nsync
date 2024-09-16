@@ -9,27 +9,27 @@ def log(*args):  # pylint: disable=missing-function-docstring
     print(f'{time.time() - start:.03f}', *args)
 
 
-class Sleep:
+class SleepToken:
     """Token to tell the event loop to resume a coroutine after a delay."""
 
     def __init__(self, delay):
-        log('Sleep.__init__', self, delay)
+        log('SleepToken.__init__', self, delay)
         self.delay = delay
 
     def __await__(self):
-        log('Sleep.__await__', self)
-        log('Sleep.__await__ yield self')
+        log('SleepToken.__await__', self)
+        log('SleepToken.__await__ yield self')
         ret = yield self
-        log('Sleep.__await__ yield self:', ret)
+        log('SleepToken.__await__ yield self:', ret)
 
 
 async def async_addone(a):
     """Add 1 to a."""
 
     log('async_addone', a)
-    log('async_addone await Sleep(1.1)')
-    ret = await Sleep(1.1)
-    log('async_addone await Sleep(1.1):', ret)
+    log('async_addone await SleepToken(1.1)')
+    ret = await SleepToken(1.1)
+    log('async_addone await SleepToken(1.1):', ret)
     return a + 1
 
 
@@ -47,7 +47,7 @@ def sync_await(coroutine):
             return e.value
 
         log('sync_await coroutine.send:', ret)
-        if isinstance(ret, Sleep):
+        if isinstance(ret, SleepToken):
             log('sync_await time.sleep', ret.delay)
             time.sleep(ret.delay)
 
