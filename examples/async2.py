@@ -38,14 +38,18 @@ def sync_await(coroutine):
 
     log('sync_await', coroutine)
     while True:
+        log('sync_await coroutine.send')
+
         try:
-            log('sync_await coroutine.send')
             ret = coroutine.send(None)
-            log('sync_await coroutine.send:', ret)
-            if isinstance(ret, Sleep):
-                time.sleep(ret.delay)
         except StopIteration as e:
+            log('sync_await StopIteration', e)
             return e.value
+
+        log('sync_await coroutine.send:', ret)
+        if isinstance(ret, Sleep):
+            log('sync_await time.sleep', ret.delay)
+            time.sleep(ret.delay)
 
 
 def main():  # pylint: disable=missing-function-docstring
