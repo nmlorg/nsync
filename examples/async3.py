@@ -43,14 +43,19 @@ async def async_read():
     """Read data from a socket."""
 
     log('async_read')
+
     log('async_read await SleepToken(1.1)')
     ret = await SleepToken(1.1)
     log('async_read await SleepToken(1.1):', ret)
+
+    log('async_read socket.create_connection')
     sock = socket.create_connection(('httpbin.org', 80))
+    log('async_read sock.sendall')
     sock.sendall(b'GET /get HTTP/1.0\r\n\r\n')
     log('async_read await ReadToken')
     ret = await ReadToken(sock)
     log('async_read await ReadToken:', ret)
+
     return ret
 
 
