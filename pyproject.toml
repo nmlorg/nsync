@@ -2,6 +2,7 @@
 name = 'nsync'
 version = '0.0.1'
 description = 'Bridge code to let non-async programs use async-compatible libraries.'
+readme = 'README.md'
 authors = [
     {name = 'Daniel Reed', email = 'nmlorg@gmail.com'},
 ]
