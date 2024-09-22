@@ -1,5 +1,6 @@
 """A version of async3.py that shows how running multiple coroutines in parallel works."""
 
+import inspect
 import select
 import socket
 import time
@@ -8,35 +9,38 @@ start = time.time()
 
 
 def log(*args):  # pylint: disable=missing-function-docstring
-    print(f'{time.time() - start:.03f}', *args)
+    stack = inspect.stack()
+    caller = stack[1]
+    print(f'{time.time() - start:.03f}{"    " * (len(stack) - 3)}',
+          f'[{caller.function}:{caller.lineno}]', *args)
 
 
 class SleepToken:
     """Token to tell the event loop to resume a coroutine after a delay."""
 
     def __init__(self, delay):
-        log('SleepToken.__init__', self, delay)
+        log(self, delay)
         self.delay = delay
 
     def __await__(self):
-        log('SleepToken.__await__', self)
-        log('SleepToken.__await__ yield self')
+        log(self)
+        log('ret = yield self:')
         ret = yield self
-        log('SleepToken.__await__ yield self:', ret)
+        log('ret =', ret)
 
 
 class ReadToken:
     """Token to tell the event loop to resume a coroutine after reading data from a socket."""
 
     def __init__(self, sock):
-        log('ReadToken.__init__', self, sock)
+        log(self, sock)
         self.sock = sock
 
     def __await__(self):
-        log('ReadToken.__await__', self)
-        log('ReadToken.__await__ yield self')
+        log(self)
+        log('ret = yield self:')
         ret = yield self
-        log('ReadToken.__await__ yield self:', ret)
+        log('ret =', ret)
         return ret
 
 
@@ -44,61 +48,79 @@ class GatherToken:
     """Token to tell the event loop to resume after a list of 1 or more tokens finishes."""
 
     def __init__(self, *tokens):
-        log('GatherToken.__init__', self, tokens)
+        log(self, tokens)
         self.tokens = tokens
 
     def __await__(self):
-        log('GatherToken.__await__', self)
-        log('GatherToken.__await__ yield self')
+        log(self)
+        log('ret = yield self:')
         ret = yield self
-        log('GatherToken.__await__ yield self:', ret)
+        log('ret =', ret)
         return ret
 
 
 async def async_read():
     """Read data from a socket."""
 
-    log('async_read')
+    log('sleeptoken = SleepToken(.1):')
+    sleeptoken = SleepToken(.1)
+    log('sleeptoken =', sleeptoken)
 
-    log('async_read await SleepToken(1.1)')
-    ret = await SleepToken(1.1)
-    log('async_read await SleepToken(1.1):', ret)
+    log('ret = await sleeptoken:')
+    ret = await sleeptoken
+    log('ret =', ret)
 
+    log('sleep15 = SleepToken(.1):')
     sleep15 = SleepToken(1.5)
+    log('sleep15 =', sleep15)
 
-    log('async_read socket.create_connection')
+    log('sock1 = socket.create_connection:')
     sock1 = socket.create_connection(('httpbin.org', 80))
-    log('async_read sock.sendall')
+
+    log('sock1.sendall:')
     sock1.sendall(b'GET /get HTTP/1.0\r\n\r\n')
+
+    log('read1 = ReadToken(sock1):')
     read1 = ReadToken(sock1)
+    log('read1 =', read1)
 
-    log('async_read socket.create_connection')
+    log('sock2 = socket.create_connection:')
     sock2 = socket.create_connection(('httpbin.org', 80))
-    log('async_read sock.sendall')
-    sock2.sendall(b'GET /get HTTP/1.0\r\n\r\n')
-    read2 = ReadToken(sock2)
 
-    log('async_read await GatherToken')
-    read1ret, _, read2ret = await GatherToken(read1, sleep15, read2)
-    log('async_read await GatherToken:', read1ret, read2ret)
-    return read1ret, read2ret
+    log('sock2.sendall:')
+    sock2.sendall(b'GET /get HTTP/1.0\r\n\r\n')
+
+    log('read2 = ReadToken(sock2):')
+    read2 = ReadToken(sock2)
+    log('read2 =', read2)
+
+    log('gathertoken = GatherToken(read1, sleep15, read2):')
+    gathertoken = GatherToken(read1, sleep15, read2)
+    log('gathertoken =', gathertoken)
+
+    log('ret = await gathertoken')
+    ret = await gathertoken
+    log('ret =', ret)
+
+    log("return 'async_read done!'")
+    return 'async_read done!'
 
 
 def sync_await(coroutine):
     """Run the coroutine manually, returning its value; equivalent to `await coroutine`."""
 
-    log('sync_await', coroutine)
+    log('coroutine =', coroutine)
     value = None
     while True:
-        log('sync_await coroutine.send')
+        log('ret = coroutine.send', value)
 
         try:
             ret = coroutine.send(value)
         except StopIteration as e:
-            log('sync_await StopIteration', e)
+            log('StopIteration:', e)
             return e.value
 
-        log('sync_await coroutine.send:', ret)
+        log('ret =', ret)
         if isinstance(ret, GatherToken):
             value = process_tokens(ret.tokens)
         else:
@@ -108,7 +130,7 @@ def sync_await(coroutine):
 def process_tokens(tokens):
     """Read from all ReadTokens and sleep until the longest SleepToken."""
 
-    log('process_tokens', tokens)
+    log('tokens =', tokens)
     responses = [None] * len(tokens)
     delay = 0
     for token in tokens:
@@ -122,13 +144,13 @@ def process_tokens(tokens):
         for i, token in enumerate(tokens):
             if isinstance(token, ReadToken) and responses[i] is None:
                 rlist.append(token.sock)
-        log('process_tokens rlist =', rlist)
+        log('rlist =', rlist)
 
         if not rlist:
             break
 
         rlist, _, _ = select.select(rlist, [], [])
-        log('process_tokens select =', rlist)
+        log('select =', rlist)
         for sock in rlist:
             for i, token in enumerate(tokens):
                 if isinstance(token, ReadToken) and token.sock is sock:
@@ -136,15 +158,16 @@ def process_tokens(tokens):
                     break
 
     if (remaining := stoptime - time.time()) > 0:
-        log('process_tokens remaining =', remaining)
+        log('remaining =', remaining)
         time.sleep(remaining)
 
     return responses
 
 
 def main():  # pylint: disable=missing-function-docstring
+    log('ret = sync_await(async_read()):')
     ret = sync_await(async_read())
-    log('sync_await:', ret)
+    log('ret =', ret)
 
 
 if __name__ == '__main__':

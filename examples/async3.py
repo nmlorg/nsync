@@ -1,5 +1,6 @@
 """A version of async2.py that shows how feeding data back into `await` works."""
 
+import inspect
 import socket
 import time
 
@@ -7,85 +8,98 @@ start = time.time()
 
 
 def log(*args):  # pylint: disable=missing-function-docstring
-    print(f'{time.time() - start:.03f}', *args)
+    stack = inspect.stack()
+    caller = stack[1]
+    print(f'{time.time() - start:.03f}{"    " * (len(stack) - 3)}',
+          f'[{caller.function}:{caller.lineno}]', *args)
 
 
 class SleepToken:
     """Token to tell the event loop to resume a coroutine after a delay."""
 
     def __init__(self, delay):
-        log('SleepToken.__init__', self, delay)
+        log(self, delay)
         self.delay = delay
 
     def __await__(self):
-        log('SleepToken.__await__', self)
-        log('SleepToken.__await__ yield self')
+        log(self)
+        log('ret = yield self:')
         ret = yield self
-        log('SleepToken.__await__ yield self:', ret)
+        log('ret =', ret)
 
 
 class ReadToken:
     """Token to tell the event loop to resume a coroutine after reading data from a socket."""
 
     def __init__(self, sock):
-        log('ReadToken.__init__', self, sock)
+        log(self, sock)
         self.sock = sock
 
     def __await__(self):
-        log('ReadToken.__await__', self)
-        log('ReadToken.__await__ yield self')
+        log(self)
+        log('ret = yield self:')
         ret = yield self
-        log('ReadToken.__await__ yield self:', ret)
+        log('ret =', ret)
         return ret
 
 
 async def async_read():
     """Read data from a socket."""
 
-    log('async_read')
+    log('sleeptoken = SleepToken(.1):')
+    sleeptoken = SleepToken(.1)
+    log('sleeptoken =', sleeptoken)
 
-    log('async_read await SleepToken(1.1)')
-    ret = await SleepToken(1.1)
-    log('async_read await SleepToken(1.1):', ret)
+    log('ret = await sleeptoken:')
+    ret = await sleeptoken
+    log('ret =', ret)
 
-    log('async_read socket.create_connection')
+    log('sock = socket.create_connection:')
     sock = socket.create_connection(('httpbin.org', 80))
-    log('async_read sock.sendall')
-    sock.sendall(b'GET /get HTTP/1.0\r\n\r\n')
-    log('async_read await ReadToken')
-    ret = await ReadToken(sock)
-    log('async_read await ReadToken:', ret)
 
-    return ret
+    log('sock.sendall:')
+    sock.sendall(b'GET /get HTTP/1.0\r\n\r\n')
+
+    log('readtoken = ReadToken(sock):')
+    readtoken = ReadToken(sock)
+    log('readtoken =', readtoken)
+
+    log('ret = await readtoken:')
+    ret = await readtoken
+    log('ret =', ret)
+
+    log("return 'async_read done!'")
+    return 'async_read done!'
 
 
 def sync_await(coroutine):
     """Run the coroutine manually, returning its value; equivalent to `await coroutine`."""
 
-    log('sync_await', coroutine)
+    log('coroutine =', coroutine)
     value = None
     while True:
-        log('sync_await coroutine.send')
+        log('ret = coroutine.send', value)
 
         try:
             ret = coroutine.send(value)
         except StopIteration as e:
-            log('sync_await StopIteration', e)
+            log('StopIteration:', e)
             return e.value
 
-        log('sync_await coroutine.send:', ret)
+        log('ret =', ret)
         value = None
         if isinstance(ret, SleepToken):
-            log('sync_await time.sleep', ret.delay)
+            log('time.sleep', ret.delay)
             time.sleep(ret.delay)
         elif isinstance(ret, ReadToken):
-            log('sync_await', ret.sock, 'read')
+            log(ret.sock, 'read')
             value = ret.sock.recv(65536)
 
 
 def main():  # pylint: disable=missing-function-docstring
+    log('ret = sync_await(async_read()):')
     ret = sync_await(async_read())
-    log('sync_await:', ret)
+    log('ret =', ret)
 
 
 if __name__ == '__main__':
