@@ -26,4 +26,4 @@ jobs:
         pytest
     - name: Lint with pylint
       run: |
-        pylint nsync
+        pylint examples nsync

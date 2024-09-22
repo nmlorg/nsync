@@ -2,7 +2,6 @@
 
 import inspect
 import select
-import socket
 import time
 
 start = time.time()
