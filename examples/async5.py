@@ -1,4 +1,4 @@
-"""A version of async3.py that shows how running multiple coroutines in parallel works."""
+"""A version of async3.py that runs a coroutines from a coroutine (through a token)."""
 
 import inspect
 import select

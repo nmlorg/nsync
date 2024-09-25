@@ -1,7 +1,8 @@
-"""A version of async3.py that shows how running multiple coroutines in parallel works."""
+"""A version of async5.py that restores async4.py's socket I/O."""
 
 import inspect
 import select
+import socket
 import time
 
 start = time.time()
@@ -48,93 +49,55 @@ class GatherToken(_BaseToken):
         self.awaitables = awaitables
 
 
-async def coro_token():
-    """Coroutine that awaits a token."""
+async def async_read():
+    """Read data from a socket."""
 
-    log('sleeptoken = SleepToken(.1):')
-    sleeptoken = SleepToken(.1)
-    log('sleeptoken =', sleeptoken)
+    log('sleep1 = SleepToken(.1):')
+    sleep1 = SleepToken(.1)
+    log('sleep1 =', sleep1)
 
-    log('ret = await sleeptoken:')
-    ret = await sleeptoken
-    log('ret =', ret)
+    log('sleep2 = SleepToken(1.5):')
+    sleep2 = SleepToken(1.5)
+    log('sleep2 =', sleep2)
 
-    log("return 'coro_token final value'")
-    return 'coro_token final value'
+    log('sleep3 = SleepToken(1.5):')
+    sleep3 = SleepToken(1.5)
+    log('sleep3 =', sleep3)
 
+    log('sleep4 = SleepToken(2.5):')
+    sleep4 = SleepToken(2.5)
+    log('sleep4 =', sleep4)
 
-async def wait_for(token):
-    """Coroutine that awaits a token."""
+    log('sock1 = socket.create_connection:')
+    sock1 = socket.create_connection(('httpbin.org', 80))
 
-    log('token =', token)
+    log('sock1.sendall:')
+    sock1.sendall(b'GET /status/200 HTTP/1.0\r\n\r\n')
 
-    log('ret = await token:')
-    ret = await token
-    log('ret =', ret)
+    log('read1 = ReadToken(sock1):')
+    read1 = ReadToken(sock1)
+    log('read1 =', read1)
 
-    log("return 'wait_for final value'")
-    return 'wait_for final value'
+    log('sock2 = socket.create_connection:')
+    sock2 = socket.create_connection(('httpbin.org', 80))
 
+    log('sock2.sendall:')
+    sock2.sendall(b'GET /status/200 HTTP/1.0\r\n\r\n')
 
-async def coro_coro_token():
-    """Coroutine that awaits a coroutine awaiting a token."""
+    log('read2 = ReadToken(sock2):')
+    read2 = ReadToken(sock2)
+    log('read2 =', read2)
 
-    log('sleeptoken = SleepToken(.2):')
-    sleeptoken = SleepToken(.2)
-    log('sleeptoken =', sleeptoken)
-
-    log('wait_for_coro = wait_for(sleeptoken):')
-    wait_for_coro = wait_for(sleeptoken)
-    log('wait_for_coro =', wait_for_coro)
-
-    log('ret = await wait_for_coro:')
-    ret = await wait_for_coro
-    log('ret =', ret)
-
-    log("return 'coro_coro_token final value'")
-    return 'coro_coro_token final value'
-
-
-async def coro_token_token():
-    """Coroutine that awaits a token that contains a token."""
-
-    log('sleeptoken = SleepToken(.3):')
-    sleeptoken = SleepToken(.3)
-    log('sleeptoken =', sleeptoken)
-
-    log('gathertoken = GatherToken(sleeptoken):')
-    gathertoken = GatherToken(sleeptoken)
+    log('gathertoken = GatherToken(sleep1, sleep2, sleep3, sleep4, read1, sleep2):')
+    gathertoken = GatherToken(sleep1, sleep2, sleep3, sleep4, read1, read2)
     log('gathertoken =', gathertoken)
 
-    log('ret = await gathertoken:')
+    log('ret = await gathertoken')
     ret = await gathertoken
     log('ret =', ret)
 
-    log("return 'coro_token_token final value'")
-    return 'coro_token_token final value'
-
-
-async def coro_token_coro_token():
-    """Coroutine that awaits a token that contains a coroutine awaiting a token."""
-
-    log('sleeptoken = SleepToken(.4):')
-    sleeptoken = SleepToken(.4)
-    log('sleeptoken =', sleeptoken)
-
-    log('wait_for_coro = wait_for(sleeptoken):')
-    wait_for_coro = wait_for(sleeptoken)
-    log('wait_for_coro =', wait_for_coro)
-
-    log('gathertoken = GatherToken(wait_for_coro):')
-    gathertoken = GatherToken(wait_for_coro)
-    log('gathertoken =', gathertoken)
-
-    log('ret = await gathertoken:')
-    ret = await gathertoken
-    log('ret =', ret)
-
-    log("return 'coro_token_coro_token final value'")
-    return 'coro_token_coro_token final value'
+    log("return 'async_read done!'")
+    return 'async_read done!'
 
 
 class _BaseWrapper:
@@ -216,6 +179,7 @@ class CoroutineWrapper(_BaseWrapper):
 
     def get_waiting_for(self):
         log('self =', self)
+        assert not self.finalized
         return self._waiting_for.get_waiting_for()
 
 
@@ -229,6 +193,7 @@ class ReadWrapper(_BaseWrapper):
 
     def get_waiting_for(self):
         log('self =', self)
+        assert not self.finalized
         return _WaitingFor(readers=[self])
 
 
@@ -242,6 +207,7 @@ class SleepWrapper(_BaseWrapper):
 
     def get_waiting_for(self):
         log('self =', self)
+        assert not self.finalized
         return _WaitingFor(sleeper=self)
 
 
@@ -265,6 +231,7 @@ class GatherWrapper(_BaseWrapper):
 
     def get_waiting_for(self):
         log('self =', self)
+        assert not self.finalized
         readers = []
         sleeper = None
         for awaitable in self._awaitables:
@@ -285,69 +252,44 @@ def sync_await(coroutine):
     coro = _BaseWrapper.wrap(None, coroutine)
 
     while not coro.finalized:
-        waiting_for = coro.get_waiting_for()
-        log('readers =', waiting_for.readers, 'sleeper =', waiting_for.sleeper)
-        waiting_for.sleeper.finalize(time.sleep(waiting_for.sleeper.deadline - time.time()))
-        #if isinstance(ret, GatherToken):
-        #    value = process_tokens(ret.awaitables)
-        #else:
-        #    value = process_tokens([ret])[0]
+        process_awaitables(coro.get_waiting_for())
+
     return coro.value
 
 
-def process_tokens(tokens):
-    """Read from all ReadTokens and sleep until the longest SleepToken."""
+def process_awaitables(waiting_for):
+    """Wait (up to the shortest SleepToken's deadline) for data from a ReadToken's socket."""
 
-    log('tokens =', tokens)
-    responses = [None] * len(tokens)
-    delay = 0
-    for token in tokens:
-        if isinstance(token, SleepToken):
-            if token.delay > delay:
-                delay = token.delay
-    stoptime = delay and time.time() + delay
+    log('readers =', waiting_for.readers, 'sleeper =', waiting_for.sleeper)
 
-    while True:
-        rlist = []
-        for i, token in enumerate(tokens):
-            if isinstance(token, ReadToken) and responses[i] is None:
-                rlist.append(token.sock)
-        log('rlist =', rlist)
+    if waiting_for.sleeper:
+        now = time.time()
+        if (deadline := waiting_for.sleeper.deadline) <= now:
+            waiting_for.sleeper.finalize(f'deadline ({deadline}) <= now ({now})')
+            return
+        timeout = waiting_for.sleeper.deadline - now
+    else:
+        timeout = None
 
-        if not rlist:
-            break
+    rlist = [reader.sock for reader in waiting_for.readers]
 
-        rlist, _, _ = select.select(rlist, [], [])
-        log('select =', rlist)
-        for sock in rlist:
-            for i, token in enumerate(tokens):
-                if isinstance(token, ReadToken) and token.sock is sock:
-                    responses[i] = sock.recv(65536)
-                    break
+    log('rlist = select.select rlist =', rlist, 'timeout =', timeout)
+    rlist, _, _ = select.select(rlist, [], [], timeout)
+    log('rlist =', rlist)
 
-    if (remaining := stoptime - time.time()) > 0:
-        log('remaining =', remaining)
-        time.sleep(remaining)
-
-    return responses
+    if not rlist:  # select.select timed out.
+        waiting_for.sleeper.finalize(f'select.select timed out after {timeout} s')
+    else:
+        for reader in waiting_for.readers:
+            if reader.sock in rlist:
+                data = reader.sock.recv(65536)
+                reader.finalize(data)
 
 
 def main():  # pylint: disable=missing-function-docstring
-    log('Coroutine waiting for a token:')
-    ret = sync_await(coro_token())
-    log('ret =', repr(ret))
-
-    log('Coroutine waiting for a coroutine waiting for a token:')
-    ret = sync_await(coro_coro_token())
-    log('ret =', repr(ret))
-
-    log('Coroutine waiting for a token containing a token:')
-    ret = sync_await(coro_token_token())
-    log('ret =', repr(ret))
-
-    log('Coroutine waiting for a token containing a coroutine waiting for a token:')
-    ret = sync_await(coro_token_coro_token())
-    log('ret =', repr(ret))
+    log('ret = sync_await(async_read()):')
+    ret = sync_await(async_read())
+    log('ret =', ret)
 
 
 if __name__ == '__main__':
