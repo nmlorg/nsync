@@ -225,7 +225,7 @@ class ReadWrapper(_BaseWrapper):
     def __init__(self, parent, sock):
         log('self =', self, 'parent =', parent, 'sock =', sock)
         super().__init__(parent)
-        self._sock = sock
+        self.sock = sock
 
     def get_waiting_for(self):
         log('self =', self)
@@ -268,6 +268,8 @@ class GatherWrapper(_BaseWrapper):
         readers = []
         sleeper = None
         for awaitable in self._awaitables:
+            if awaitable.finalized:
+                continue
             waiting_for = awaitable.get_waiting_for()
             readers.extend(waiting_for.readers)
             if sleeper is None or (waiting_for.sleeper is not None and

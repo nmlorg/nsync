@@ -55,7 +55,7 @@ async def async_read():
     sock = socket.create_connection(('httpbin.org', 80))
 
     log('sock.sendall:')
-    sock.sendall(b'GET /get HTTP/1.0\r\n\r\n')
+    sock.sendall(b'GET /status/200 HTTP/1.0\r\n\r\n')
 
     log('readtoken = ReadToken(sock):')
     readtoken = ReadToken(sock)

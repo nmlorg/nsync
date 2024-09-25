@@ -60,7 +60,7 @@ async def async_read():
     ret = await sleeptoken
     log('ret =', ret)
 
-    log('sleep15 = SleepToken(.1):')
+    log('sleep15 = SleepToken(1.5):')
     sleep15 = SleepToken(1.5)
     log('sleep15 =', sleep15)
 
@@ -68,7 +68,7 @@ async def async_read():
     sock1 = socket.create_connection(('httpbin.org', 80))
 
     log('sock1.sendall:')
-    sock1.sendall(b'GET /get HTTP/1.0\r\n\r\n')
+    sock1.sendall(b'GET /status/200 HTTP/1.0\r\n\r\n')
 
     log('read1 = ReadToken(sock1):')
     read1 = ReadToken(sock1)
@@ -78,7 +78,7 @@ async def async_read():
     sock2 = socket.create_connection(('httpbin.org', 80))
 
     log('sock2.sendall:')
-    sock2.sendall(b'GET /get HTTP/1.0\r\n\r\n')
+    sock2.sendall(b'GET /status/200 HTTP/1.0\r\n\r\n')
 
     log('read2 = ReadToken(sock2):')
     read2 = ReadToken(sock2)
