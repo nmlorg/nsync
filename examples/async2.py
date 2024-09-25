@@ -17,11 +17,11 @@ class SleepToken:
     """Token to tell the event loop to resume a coroutine after a delay."""
 
     def __init__(self, delay):
-        log(self, delay)
+        log('self =', self, 'delay =', delay)
         self.delay = delay
 
     def __await__(self):
-        log(self)
+        log('self =', self)
         log('ret = yield self:')
         ret = yield self
         log('ret =', ret)

@@ -18,7 +18,7 @@ def log(*args):  # pylint: disable=missing-function-docstring
 class _BaseToken:
 
     def __await__(self):
-        log(self)
+        log('self =', self)
         log('ret = yield self:')
         ret = yield self
         log('ret =', ret)
@@ -29,7 +29,7 @@ class SleepToken(_BaseToken):
     """Token to tell the event loop to resume a coroutine after a delay."""
 
     def __init__(self, delay):
-        log(self, delay)
+        log('self =', self, 'delay =', delay)
         self.delay = delay
 
 
@@ -37,7 +37,7 @@ class ReadToken(_BaseToken):
     """Token to tell the event loop to resume a coroutine after reading data from a socket."""
 
     def __init__(self, sock):
-        log(self, sock)
+        log('self =', self, 'sock =', sock)
         self.sock = sock
 
 
@@ -45,7 +45,7 @@ class GatherToken(_BaseToken):
     """Token to tell the event loop to resume after a list of 1 or more awaitables finishes."""
 
     def __init__(self, *awaitables):
-        log(self, awaitables)
+        log('self =', self, 'awaitables =', awaitables)
         self.awaitables = awaitables
 
 
