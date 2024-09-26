@@ -49,55 +49,36 @@ class GatherToken(_BaseToken):
         self.awaitables = awaitables
 
 
-async def async_read():
-    """Read data from a socket."""
+async def async_fetch(delay):
+    """Read data from a socket after the given delay."""
 
-    log('sleep1 = SleepToken(.1):')
-    sleep1 = SleepToken(.1)
-    log('sleep1 =', sleep1)
-
-    log('sleep2 = SleepToken(1.5):')
-    sleep2 = SleepToken(1.5)
-    log('sleep2 =', sleep2)
-
-    log('sleep3 = SleepToken(1.5):')
-    sleep3 = SleepToken(1.5)
-    log('sleep3 =', sleep3)
-
-    log('sleep4 = SleepToken(2.5):')
-    sleep4 = SleepToken(2.5)
-    log('sleep4 =', sleep4)
-
-    log('sock1 = socket.create_connection:')
-    sock1 = socket.create_connection(('httpbin.org', 80))
-
-    log('sock1.sendall:')
-    sock1.sendall(b'GET /status/200 HTTP/1.0\r\n\r\n')
-
-    log('read1 = ReadToken(sock1):')
-    read1 = ReadToken(sock1)
-    log('read1 =', read1)
-
-    log('sock2 = socket.create_connection:')
-    sock2 = socket.create_connection(('httpbin.org', 80))
-
-    log('sock2.sendall:')
-    sock2.sendall(b'GET /status/200 HTTP/1.0\r\n\r\n')
-
-    log('read2 = ReadToken(sock2):')
-    read2 = ReadToken(sock2)
-    log('read2 =', read2)
-
-    log('gathertoken = GatherToken(sleep1, sleep2, sleep3, sleep4, read1, sleep2):')
-    gathertoken = GatherToken(sleep1, sleep2, sleep3, sleep4, read1, read2)
-    log('gathertoken =', gathertoken)
-
-    log('ret = await gathertoken')
-    ret = await gathertoken
+    log('delay =', delay)
+    log('await SleepToken(delay):')
+    await SleepToken(delay)
+    log('sock = socket.create_connection:')
+    sock = socket.create_connection(('httpbin.org', 80))
+    log('sock.sendall:')
+    sock.sendall(b'GET /status/200 HTTP/1.0\r\n\r\n')
+    log('ret = await ReadToken(sock):')
+    ret = await ReadToken(sock)
     log('ret =', ret)
+    log("return f'async_fetch({delay}) done!'")
+    return f'async_fetch({delay}) done!'
 
-    log("return 'async_read done!'")
-    return 'async_read done!'
+
+async def async_main():
+    """Spawn two background tasks off and return."""
+
+    log('task1 = create_task(async_fetch(.1))')
+    task1 = await create_task(async_fetch(.1))
+    log('task1 =', task1)
+
+    log('task2 = create_task(async_fetch(.2))')
+    task2 = await create_task(async_fetch(.2))
+    log('task2 =', task2)
+
+    log("return 'async_main done!'")
+    return 'async_main done!'
 
 
 class _BaseWrapper:
@@ -245,6 +226,14 @@ class GatherWrapper(_BaseWrapper):
         return _WaitingFor(readers=readers, sleeper=sleeper)
 
 
+async def create_task(awaitable):
+    """Run awaitable "in the background" (alongside the coroutine passed to sync_await)."""
+
+    log('awaitable =', awaitable)
+    # TODO: Run awaitable in the background.
+    return awaitable
+
+
 def sync_await(coroutine):
     """Run the coroutine manually, returning its value; equivalent to `await coroutine`."""
 
@@ -287,8 +276,8 @@ def process_awaitables(waiting_for):
 
 
 def main():  # pylint: disable=missing-function-docstring
-    log('ret = sync_await(async_read()):')
-    ret = sync_await(async_read())
+    log('ret = sync_await(async_main()):')
+    ret = sync_await(async_main())
     log('ret =', ret)
 
 
