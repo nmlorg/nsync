@@ -70,11 +70,11 @@ async def async_main():
     """Spawn two background tasks off and return."""
 
     log('task1 = create_task(async_fetch(.1))')
-    task1 = await create_task(async_fetch(.1))
+    task1 = create_task(async_fetch(.1))
     log('task1 =', task1)
 
     log('task2 = create_task(async_fetch(.2))')
-    task2 = await create_task(async_fetch(.2))
+    task2 = create_task(async_fetch(.2))
     log('task2 =', task2)
 
     log("return 'async_main done!'")
@@ -198,7 +198,17 @@ class GatherWrapper(_BaseWrapper):
     def __init__(self, parent, awaitables):
         log('self =', self, 'parent =', parent, 'awaitables =', awaitables)
         super().__init__(parent)
-        self._awaitables = [_BaseWrapper.wrap(self, awaitable) for awaitable in awaitables]
+        self._awaitables = []
+        for awaitable in awaitables:
+            self.add(awaitable)
+
+    def add(self, awaitable):
+        """Don't finalize this gather until awaitable finalizes."""
+
+        log('self =', self, 'awaitable =', awaitable)
+        task = _BaseWrapper.wrap(self, awaitable)
+        self._awaitables.append(task)
+        return task
 
     def step(self):
         log('self =', self)
@@ -226,24 +236,26 @@ class GatherWrapper(_BaseWrapper):
         return _WaitingFor(readers=readers, sleeper=sleeper)
 
 
-async def create_task(awaitable):
+def create_task(awaitable):
     """Run awaitable "in the background" (alongside the coroutine passed to sync_await)."""
 
     log('awaitable =', awaitable)
-    # TODO: Run awaitable in the background.
-    return awaitable
+    return create_task.add(awaitable)
 
 
 def sync_await(coroutine):
     """Run the coroutine manually, returning its value; equivalent to `await coroutine`."""
 
     log('coroutine =', coroutine)
-    coro = _BaseWrapper.wrap(None, coroutine)
+    top_level = GatherWrapper(None, ())
+    log('top_level =', top_level)
+    create_task.add = top_level.add
+    create_task(coroutine)
 
-    while not coro.finalized:
-        process_awaitables(coro.get_waiting_for())
+    while not top_level.finalized:
+        process_awaitables(top_level.get_waiting_for())
 
-    return coro.value
+    return top_level.value[0]
 
 
 def process_awaitables(waiting_for):
@@ -260,7 +272,7 @@ def process_awaitables(waiting_for):
     else:
         timeout = None
 
-    rlist = [reader.sock for reader in waiting_for.readers]
+    rlist = {reader.sock for reader in waiting_for.readers}
 
     log('rlist = select.select rlist =', rlist, 'timeout =', timeout)
     rlist, _, _ = select.select(rlist, [], [], timeout)
@@ -269,10 +281,12 @@ def process_awaitables(waiting_for):
     if not rlist:  # select.select timed out.
         waiting_for.sleeper.finalize(f'select.select timed out after {timeout} s')
     else:
+        datas = {}
+        for sock in rlist:
+            datas[sock] = sock.recv(65536)
         for reader in waiting_for.readers:
-            if reader.sock in rlist:
-                data = reader.sock.recv(65536)
-                reader.finalize(data)
+            if reader.sock in datas:
+                reader.finalize(datas[reader.sock])
 
 
 def main():  # pylint: disable=missing-function-docstring
