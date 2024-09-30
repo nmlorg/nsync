@@ -1,5 +1,6 @@
 """A version of async5.py that restores async4.py's socket I/O."""
 
+import contextvars
 import inspect
 import select
 import socket
@@ -236,20 +237,28 @@ class GatherWrapper(_BaseWrapper):
         return _WaitingFor(readers=readers, sleeper=sleeper)
 
 
+TOP_LEVEL = contextvars.ContextVar('top-level GatherWrapper')
+
+
 def create_task(awaitable):
     """Run awaitable "in the background" (alongside the coroutine passed to sync_await)."""
 
     log('awaitable =', awaitable)
-    return create_task.add(awaitable)
+    return TOP_LEVEL.get().add(awaitable)
 
 
 def sync_await(coroutine):
     """Run the coroutine manually, returning its value; equivalent to `await coroutine`."""
 
+    return contextvars.copy_context().run(_sync_await, coroutine)
+
+
+def _sync_await(coroutine):
     log('coroutine =', coroutine)
     top_level = GatherWrapper(None, ())
     log('top_level =', top_level)
-    create_task.add = top_level.add
+    TOP_LEVEL.set(top_level)
+
     create_task(coroutine)
 
     while not top_level.finalized:
