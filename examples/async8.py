@@ -1,4 +1,4 @@
-"""A version of async6.py that supports coroutines running in the background."""
+"""A version of async7.py that supports awaiting background tasks."""
 
 import contextvars
 import inspect
@@ -78,16 +78,27 @@ async def async_main():
     task2 = create_task(async_fetch(.2))
     log('task2 =', task2)
 
+    log('ret = await task1')
+    ret = await task1
+    log('ret =', ret)
+
     log("return 'async_main done!'")
     return 'async_main done!'
 
 
-class _BaseWrapper:
+class _BaseWrapper(_BaseToken):
     finalized = False
     value = None
 
-    def __init__(self, parent):
-        self._parent = parent
+    def __init__(self):
+        self._then = []
+
+    def then(self, cb):
+        """Run cb() when this awaitable is finalized."""
+
+        log('self =', self, 'cb =', cb)
+        assert not self.finalized
+        self._then.append(cb)
 
     def finalize(self, value):
         """Mark this awaitable as finalized and notify anything waiting for it."""
@@ -96,8 +107,8 @@ class _BaseWrapper:
         assert not self.finalized
         self.value = value
         self.finalized = True
-        if self._parent:
-            self._parent.step()
+        for cb in self._then:
+            cb()
 
     def step(self):
         """Check whether this awaitable is still waiting, and perform as much work as possible."""
@@ -116,14 +127,17 @@ class _BaseWrapper:
 
         log('parent =', parent, 'awaitable =', awaitable)
         if inspect.iscoroutine(awaitable):
-            return CoroutineWrapper(parent, awaitable)
-        if isinstance(awaitable, ReadToken):
-            return ReadWrapper(parent, awaitable.sock)
-        if isinstance(awaitable, SleepToken):
-            return SleepWrapper(parent, awaitable.delay)
-        if isinstance(awaitable, GatherToken):
-            return GatherWrapper(parent, awaitable.awaitables)
-        raise NotImplementedError()
+            awaitable = CoroutineWrapper(awaitable)
+        elif isinstance(awaitable, ReadToken):
+            awaitable = ReadWrapper(awaitable.sock)
+        elif isinstance(awaitable, SleepToken):
+            awaitable = SleepWrapper(awaitable.delay)
+        elif isinstance(awaitable, GatherToken):
+            awaitable = GatherWrapper(awaitable.awaitables)
+        elif not isinstance(awaitable, _BaseWrapper):
+            raise NotImplementedError()
+        awaitable.then(parent.step)
+        return awaitable
 
 
 class _WaitingFor:
@@ -138,9 +152,9 @@ class _WaitingFor:
 class CoroutineWrapper(_BaseWrapper):
     """An instance of a call to an async def function."""
 
-    def __init__(self, parent, coro):
-        log('self =', self, 'parent =', parent, 'coro =', coro)
-        super().__init__(parent)
+    def __init__(self, coro):
+        log('self =', self, 'coro =', coro)
+        super().__init__()
         self._coro = coro
 
     _waiting_for = None
@@ -176,9 +190,9 @@ class CoroutineWrapper(_BaseWrapper):
 class ReadWrapper(_BaseWrapper):
     """An attempt to await a ReadToken (read data from a network socket)."""
 
-    def __init__(self, parent, sock):
-        log('self =', self, 'parent =', parent, 'sock =', sock)
-        super().__init__(parent)
+    def __init__(self, sock):
+        log('self =', self, 'sock =', sock)
+        super().__init__()
         self.sock = sock
 
     def get_waiting_for(self):
@@ -190,9 +204,9 @@ class ReadWrapper(_BaseWrapper):
 class SleepWrapper(_BaseWrapper):
     """An attempt to await a SleepToken (pause execution until an amount of time has passed)."""
 
-    def __init__(self, parent, delay):
-        log('self =', self, 'parent =', parent, 'delay =', delay)
-        super().__init__(parent)
+    def __init__(self, delay):
+        log('self =', self, 'delay =', delay)
+        super().__init__()
         self.deadline = time.time() + delay
 
     def get_waiting_for(self):
@@ -204,9 +218,9 @@ class SleepWrapper(_BaseWrapper):
 class GatherWrapper(_BaseWrapper):
     """An attempt to await a GatherToken (1 or more other awaitables)."""
 
-    def __init__(self, parent, awaitables):
-        log('self =', self, 'parent =', parent, 'awaitables =', awaitables)
-        super().__init__(parent)
+    def __init__(self, awaitables):
+        log('self =', self, 'awaitables =', awaitables)
+        super().__init__()
         self._awaitables = []
         for awaitable in awaitables:
             self.add(awaitable)
@@ -234,15 +248,15 @@ class GatherWrapper(_BaseWrapper):
     def get_waiting_for(self):
         log('self =', self)
         assert not self.finalized
-        readers = []
-        runnables = []
+        readers = set()
+        runnables = set()
         sleeper = None
         for awaitable in self._awaitables:
             if awaitable.finalized:
                 continue
             waiting_for = awaitable.get_waiting_for()
-            readers.extend(waiting_for.readers)
-            runnables.extend(waiting_for.runnables)
+            readers.update(waiting_for.readers)
+            runnables.update(waiting_for.runnables)
             if sleeper is None or (waiting_for.sleeper is not None and
                                    sleeper.deadline > waiting_for.sleeper.deadline):
                 sleeper = waiting_for.sleeper
@@ -267,7 +281,7 @@ def sync_await(coroutine):
 
 def _sync_await(coroutine):
     log('coroutine =', coroutine)
-    top_level = GatherWrapper(None, ())
+    top_level = GatherWrapper(())
     log('top_level =', top_level)
     TOP_LEVEL.set(top_level)
 
