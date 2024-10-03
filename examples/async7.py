@@ -1,4 +1,4 @@
-"""A version of async5.py that restores async4.py's socket I/O."""
+"""A version of async6.py that supports coroutines running in the background."""
 
 import contextvars
 import inspect
