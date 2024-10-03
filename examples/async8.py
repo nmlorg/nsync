@@ -86,19 +86,32 @@ async def async_main():
     return 'async_main done!'
 
 
-class _BaseWrapper(_BaseToken):
-    finalized = False
-    value = None
+class _Promise:
 
     def __init__(self):
-        self._then = []
+        log('self =', self)
+        self.__then = []
 
     def then(self, cb):
-        """Run cb() when this awaitable is finalized."""
+        """Run cb() when this is finalized."""
 
         log('self =', self, 'cb =', cb)
-        assert not self.finalized
-        self._then.append(cb)
+        assert self.__then is not None
+        self.__then.append(cb)
+
+    def resolve(self):
+        """Run all callbacks."""
+
+        log('self =', self)
+        for cb in self.__then:
+            log('cb =', cb)
+            cb()
+        self.__then = None
+
+
+class _BaseWrapper(_BaseToken, _Promise):
+    finalized = False
+    value = None
 
     def finalize(self, value):
         """Mark this awaitable as finalized and notify anything waiting for it."""
@@ -107,8 +120,7 @@ class _BaseWrapper(_BaseToken):
         assert not self.finalized
         self.value = value
         self.finalized = True
-        for cb in self._then:
-            cb()
+        self.resolve()
 
     def step(self):
         """Check whether this awaitable is still waiting, and perform as much work as possible."""
