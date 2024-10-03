@@ -126,9 +126,10 @@ class _BaseWrapper:
 
 class _WaitingFor:
 
-    def __init__(self, *, readers=(), sleeper=None):
-        log('self =', self, 'readers =', readers, 'sleeper =', sleeper)
+    def __init__(self, *, readers=(), runnables=(), sleeper=None):
+        log('self =', self, 'readers =', readers, 'runnables =', runnables, 'sleeper =', sleeper)
         self.readers = readers
+        self.runnables = runnables
         self.sleeper = sleeper
 
 
@@ -139,13 +140,14 @@ class CoroutineWrapper(_BaseWrapper):
         log('self =', self, 'parent =', parent, 'coro =', coro)
         super().__init__(parent)
         self._coro = coro
-        self._send(None)
 
     _waiting_for = None
 
     def step(self):
         log('self =', self)
-        if self._waiting_for.finalized:
+        if self._waiting_for is None:
+            self._send(None)
+        elif self._waiting_for.finalized:
             value = self._waiting_for.value
             self._waiting_for = None
             self._send(value)
@@ -162,6 +164,8 @@ class CoroutineWrapper(_BaseWrapper):
     def get_waiting_for(self):
         log('self =', self)
         assert not self.finalized
+        if self._waiting_for is None:
+            return _WaitingFor(runnables=[self])
         return self._waiting_for.get_waiting_for()
 
 
@@ -225,16 +229,18 @@ class GatherWrapper(_BaseWrapper):
         log('self =', self)
         assert not self.finalized
         readers = []
+        runnables = []
         sleeper = None
         for awaitable in self._awaitables:
             if awaitable.finalized:
                 continue
             waiting_for = awaitable.get_waiting_for()
             readers.extend(waiting_for.readers)
+            runnables.extend(waiting_for.runnables)
             if sleeper is None or (waiting_for.sleeper is not None and
                                    sleeper.deadline > waiting_for.sleeper.deadline):
                 sleeper = waiting_for.sleeper
-        return _WaitingFor(readers=readers, sleeper=sleeper)
+        return _WaitingFor(readers=readers, runnables=runnables, sleeper=sleeper)
 
 
 TOP_LEVEL = contextvars.ContextVar('top-level GatherWrapper')
@@ -270,7 +276,13 @@ def _sync_await(coroutine):
 def process_awaitables(waiting_for):
     """Wait (up to the shortest SleepToken's deadline) for data from a ReadToken's socket."""
 
-    log('readers =', waiting_for.readers, 'sleeper =', waiting_for.sleeper)
+    log('readers =', waiting_for.readers, 'runnables =', waiting_for.runnables, 'sleeper =',
+        waiting_for.sleeper)
+
+    if waiting_for.runnables:
+        for runnable in waiting_for.runnables:
+            runnable.step()
+        return
 
     if waiting_for.sleeper:
         now = time.time()
