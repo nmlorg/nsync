@@ -93,6 +93,7 @@ class _BaseWrapper:
         """Mark this awaitable as finalized and notify anything waiting for it."""
 
         log('self =', self, 'value =', value)
+        assert not self.finalized
         self.value = value
         self.finalized = True
         if self._parent:
@@ -102,6 +103,7 @@ class _BaseWrapper:
         """Check whether this awaitable is still waiting, and perform as much work as possible."""
 
         log('self =', self)
+        assert not self.finalized
 
     def get_waiting_for(self):
         """Return a _WaitingFor of everything this is waiting for (directly or indirectly)."""
@@ -145,6 +147,7 @@ class CoroutineWrapper(_BaseWrapper):
 
     def step(self):
         log('self =', self)
+        assert not self.finalized
         if self._waiting_for is None:
             self._send(None)
         elif self._waiting_for.finalized:
@@ -154,6 +157,7 @@ class CoroutineWrapper(_BaseWrapper):
 
     def _send(self, value):
         log('self =', self, 'value =', value)
+        assert not self.finalized
         try:
             waiting_for = self._coro.send(value)
         except StopIteration as e:
@@ -211,12 +215,14 @@ class GatherWrapper(_BaseWrapper):
         """Don't finalize this gather until awaitable finalizes."""
 
         log('self =', self, 'awaitable =', awaitable)
+        assert not self.finalized
         task = _BaseWrapper.wrap(self, awaitable)
         self._awaitables.append(task)
         return task
 
     def step(self):
         log('self =', self)
+        assert not self.finalized
         values = []
         for awaitable in self._awaitables:
             if not awaitable.finalized:
