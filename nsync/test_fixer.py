@@ -1,4 +1,4 @@
-"""Tests for nsync."""
+"""Tests for nsync.fixer."""
 
 import pytest
 
